@@ -5,7 +5,10 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.exceptions import OutputParserException
 from dotenv import load_dotenv
 
-load_dotenv()
+APP_ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
+ROOT_ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+load_dotenv(ROOT_ENV_PATH)
+load_dotenv(APP_ENV_PATH, override=True)
 
 class Chain:
     def __init__(self):
@@ -99,6 +102,3 @@ class Chain:
             }
         )
         return res.content
-
-if __name__ == "__main__":
-    print(os.getenv("GROQ_API_KEY"))
