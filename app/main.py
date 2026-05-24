@@ -105,9 +105,6 @@ def create_streamlit_app(llm, portfolio, clean_text):
     if 'processing_results' not in st.session_state:
         st.session_state.processing_results = []
 
-    if 'last_processed_row' not in st.session_state:
-        st.session_state.last_processed_row = 0
-
     if 'default_receiver_email' not in st.session_state:
         st.session_state.default_receiver_email = get_default_receiver_from_env()
 
@@ -233,15 +230,13 @@ def create_streamlit_app(llm, portfolio, clean_text):
             # Process all rows button
             st.markdown("### ⚙️ Batch Controls")
             total_rows = len(df)
-            default_resume_row = st.session_state.last_processed_row + 1 if st.session_state.last_processed_row else 1
-            default_resume_row = min(max(default_resume_row, 1), max(total_rows, 1))
-            resume_from_row = st.number_input(
-                "Resume from row",
+            rows_to_process = st.number_input(
+                "Process first N rows",
                 min_value=1,
                 max_value=max(total_rows, 1),
-                value=default_resume_row,
+                value=max(total_rows, 1),
                 step=1,
-                help="Start processing from this 1-based row number. Useful after a rate limit or partial run.",
+                help="Process this many rows starting from the top of the sheet.",
             )
 
             col1, col2 = st.columns([1, 1])
@@ -253,7 +248,6 @@ def create_streamlit_app(llm, portfolio, clean_text):
             if clear_button:
                 st.session_state.loaded_df = None
                 st.session_state.processing_results = []
-                st.session_state.last_processed_row = 0
                 st.rerun()
             
             if process_button:
@@ -265,14 +259,14 @@ def create_streamlit_app(llm, portfolio, clean_text):
                 st.markdown("### 🔄 Processing Rows...")
                 progress_bar = st.progress(0)
                 status_text = st.empty()
-                start_index = int(resume_from_row) - 1
-                rows_to_process = max(total_rows - start_index, 0)
+                start_index = 0
+                rows_to_process = min(int(rows_to_process), total_rows)
                 
                 portfolio.load_portfolio()
                 
                 processing_results = []
                 
-                for idx, row in df.iloc[start_index:].iterrows():
+                for idx, row in df.iloc[:rows_to_process].iterrows():
                     row_num = idx + 1
                     source = ""
                     
@@ -293,7 +287,6 @@ def create_streamlit_app(llm, portfolio, clean_text):
                                 'message': 'Job Link is empty or invalid'
                             })
                             progress_bar.progress(get_batch_progress_value(idx, start_index, rows_to_process))
-                            st.session_state.last_processed_row = row_num
                             continue
                         
                         # Check if it's a valid URL
@@ -304,7 +297,6 @@ def create_streamlit_app(llm, portfolio, clean_text):
                                 'message': f'Invalid URL format: "{job_link}" (must start with http:// or https://)'
                             })
                             progress_bar.progress(get_batch_progress_value(idx, start_index, rows_to_process))
-                            st.session_state.last_processed_row = row_num
                             continue
                         
                         if recipient_email.lower() in ('nan', ''):
@@ -318,7 +310,6 @@ def create_streamlit_app(llm, portfolio, clean_text):
                                 'message': 'Email is empty and no default receiver is configured'
                             })
                             progress_bar.progress(get_batch_progress_value(idx, start_index, rows_to_process))
-                            st.session_state.last_processed_row = row_num
                             continue
                         
                         # Validate email format
@@ -329,7 +320,6 @@ def create_streamlit_app(llm, portfolio, clean_text):
                                 'message': f'Invalid email format: {recipient_email}'
                             })
                             progress_bar.progress(get_batch_progress_value(idx, start_index, rows_to_process))
-                            st.session_state.last_processed_row = row_num
                             continue
                         
                         status_text.text(f"Processing row {row_num}/{total_rows}: {job_link}")
@@ -356,7 +346,6 @@ def create_streamlit_app(llm, portfolio, clean_text):
                                         'source': source
                                     })
                                     progress_bar.progress(get_batch_progress_value(idx, start_index, rows_to_process))
-                                    st.session_state.last_processed_row = row_num
                                     continue
                                 
                             except Exception as e:
@@ -367,7 +356,6 @@ def create_streamlit_app(llm, portfolio, clean_text):
                                     'source': source
                                 })
                                 progress_bar.progress(get_batch_progress_value(idx, start_index, rows_to_process))
-                                st.session_state.last_processed_row = row_num
                                 continue
                         
                         # Extract jobs from content
@@ -382,7 +370,6 @@ def create_streamlit_app(llm, portfolio, clean_text):
                                     'source': source
                                 })
                                 progress_bar.progress(get_batch_progress_value(idx, start_index, rows_to_process))
-                                st.session_state.last_processed_row = row_num
                                 continue
                         
                         # Process first job and generate email
@@ -436,7 +423,6 @@ def create_streamlit_app(llm, portfolio, clean_text):
                                 'source': source
                             })
                             progress_bar.progress(get_batch_progress_value(idx, start_index, rows_to_process))
-                            st.session_state.last_processed_row = row_num - 1
                             break
 
                         processing_results.append({
@@ -446,10 +432,7 @@ def create_streamlit_app(llm, portfolio, clean_text):
                             'source': source
                         })
                         progress_bar.progress(get_batch_progress_value(idx, start_index, rows_to_process))
-                        st.session_state.last_processed_row = row_num
                         continue
-
-                    st.session_state.last_processed_row = row_num
                     progress_bar.progress(get_batch_progress_value(idx, start_index, rows_to_process))
                 
                 # Store results in session state

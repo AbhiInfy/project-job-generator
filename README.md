@@ -12,7 +12,7 @@ This Streamlit app turns a job post into a targeted outreach email for an AI and
 - Sends emails directly with configurable SMTP credentials.
 - Supports a configurable default receiver email when a spreadsheet row has a blank `Email` value.
 - Shows which fetch path was used for each uploaded row: `loader` or `html-fallback`.
-- Supports batch resume from a chosen row after partial runs or Groq rate limits.
+- Supports processing the first `N` rows from the uploaded sheet in each batch run.
 
 **Example scenario:**
 
@@ -71,7 +71,7 @@ This Streamlit app turns a job post into a targeted outreach email for an AI and
     - `Upload File` for `.xlsx` or `.csv` files containing `Job Link` and `Email` columns.
 2. Submit the job content.
 3. Review the extracted job details and generated email.
-4. For uploaded files, optionally set `Resume from row` before running batch processing.
+4. For uploaded files, optionally set `Process first N rows` before running batch processing. For example, `5` processes rows `1` to `5`, and `9` processes rows `1` to `9`.
 5. Send emails from the UI or copy the generated output.
 
 ## Spreadsheet Processing
@@ -80,9 +80,10 @@ For uploaded `.xlsx` and `.csv` files:
 
 - Required columns: `Job Link`, `Email`
 - Optional metadata columns improve matching quality: `Job Title`, `Technology`, `Company`, `Posted`, `Location`, `Experience`
+- `Process first N rows` always starts from the top of the sheet and processes rows `1` through `N`
 - If `Email` is blank for a row, the app sends to `DEFAULT_FALLBACK_RECIPIENT`
 - Each row shows whether content came from `loader` or `html-fallback`
-- If Groq rate limits are hit, you can restart from a chosen row using `Resume from row`
+- If Groq rate limits are hit, you can rerun the batch with a smaller `Process first N rows` value
 
 ## Matching Behavior
 
