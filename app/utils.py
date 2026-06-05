@@ -29,11 +29,16 @@ def clean_text(text):
     return text
 
 
-def limit_text_for_llm(text, max_chars=6000):
+def limit_text_for_llm(text, max_chars=4000):
+    """
+    Limit text for LLM processing to avoid parsing errors with large contexts.
+    Reduced from 6000 to 4000 chars to improve parsing reliability.
+    """
     cleaned = clean_text(text)
     if len(cleaned) <= max_chars:
         return cleaned
 
+    # Try to truncate at a word boundary
     truncated = cleaned[:max_chars]
     last_space = truncated.rfind(" ")
     if last_space > int(max_chars * 0.8):

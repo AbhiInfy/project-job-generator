@@ -1,4 +1,6 @@
 import os
+import json
+import re
 from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
@@ -18,6 +20,39 @@ class Chain:
             raise ValueError("GROQ_API_KEY is not set. Please add it to your .env file.")
         self.llm = ChatGroq(temperature=0, groq_api_key=groq_api_key, model_name=groq_model)
 
+    @staticmethod
+    def _extract_json_from_text(text):
+        """
+        Robustly extract JSON from text, handling cases where LLM returns text before/after JSON.
+        Returns parsed JSON object/list, or None if no valid JSON found.
+        """
+        if not text:
+            return None
+        
+        # Try standard JSON parsing first
+        try:
+            return json.loads(text.strip())
+        except json.JSONDecodeError:
+            pass
+        
+        # Try to find JSON objects/arrays in the text
+        # Look for patterns: [{ ... }] or { ... }
+        json_patterns = [
+            r'\[[\s\S]*?\]',  # Array pattern
+            r'\{[\s\S]*?\}',   # Object pattern
+        ]
+        
+        for pattern in json_patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                try:
+                    parsed = json.loads(match)
+                    return parsed
+                except json.JSONDecodeError:
+                    continue
+        
+        return None
+
     def extract_jobs(self, cleaned_text):
         prompt_extract = PromptTemplate.from_template(
             """
@@ -26,18 +61,41 @@ class Chain:
             ### INSTRUCTION:
             The scraped text is from the career's page of a website.
             Your job is to extract the job postings and return them in JSON format containing the following keys: `role`, `experience`, `skills` and `description`.
-            Only return the valid JSON.
+            Return ONLY valid JSON, no preamble or explanation.
             ### VALID JSON (NO PREAMBLE):
             """
         )
         chain_extract = prompt_extract | self.llm
         res = chain_extract.invoke(input={"page_data": cleaned_text})
+        
         try:
-            json_parser = JsonOutputParser()
-            res = json_parser.parse(res.content)
+            # Try robust JSON extraction first
+            parsed = self._extract_json_from_text(res.content)
+            if parsed is None:
+                raise ValueError("No valid JSON found in response")
+            
+            # Ensure result is a list
+            if not isinstance(parsed, list):
+                parsed = [parsed]
+            
+            # Validate structure: each item should have expected keys or at least contain job-related data
+            if not parsed or not any(parsed):
+                raise ValueError("Parsed JSON is empty or contains no valid job data")
+            
+            return parsed
+            
+        except (json.JSONDecodeError, ValueError) as e:
+            # Provide more diagnostic error message
+            error_detail = f"JSON parsing failed: {str(e)}"
+            if len(cleaned_text) > 8000:
+                error_detail += " | Context size may be too large (>8000 chars). Consider reducing input size."
+            elif len(res.content) < 10:
+                error_detail += " | LLM returned minimal response. Job posting may not be parseable."
+            raise OutputParserException(f"Context too big. Unable to parse jobs. ({error_detail})")
         except OutputParserException:
-            raise OutputParserException("Context too big. Unable to parse jobs.")
-        return res if isinstance(res, list) else [res]
+            raise
+        except Exception as e:
+            raise OutputParserException(f"Context too big. Unable to parse jobs. (Unexpected error: {str(e)})")
 
     @staticmethod
     def _build_candidate_summary(links):
